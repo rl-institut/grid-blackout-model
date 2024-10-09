@@ -1,0 +1,1 @@
+# TODO create a simple oemof-solph model which uses grid_availabilty provided either by user as timeseries or coming from main.py functions

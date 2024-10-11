@@ -43,7 +43,7 @@ def process_daily_likelihood(blackout_probability):
 
 def generate_blackout_events(
     average_frequency,
-    average_duration,
+    average_duration=None,
     date_time_index=None,
     evaluated_days=None,
     daily_likelihood=None,
@@ -69,7 +69,7 @@ def generate_blackout_events(
         )  # assuming hourly timesteps
     elif evaluated_days is not None and date_time_index is None:
         pd.date_range(
-            start="2024-01-01", freq="H", periods=evaluated_days * HOURS_IN_DAY
+            start="2024-01-01", freq="h", periods=evaluated_days * HOURS_IN_DAY
         )
     elif evaluated_days is None and date_time_index is None:
         raise ValueError(
@@ -105,39 +105,43 @@ def generate_blackout_events(
 
     blackout_events_time.sort_index(inplace=True)
 
-    # randomly assign a duration to each blackout event based on average_duration
-    blackout_events_duration = np.random.normal(
-        loc=average_duration,  # median value: blackout duration
-        scale=average_duration * std_duration,  # Standard deviation
-        size=blackout_events_number,
-    )
-
-    print(
-        "Accumulated blackout duration: "
-        + str(round(float(sum(blackout_events_duration)), 3))
-    )
-
-    # Round so that blackout durations fit simulation timestep => here, it would make sense to simulate for small timesteps
-    for item in range(0, len(blackout_events_duration)):
-        blackout_events_duration[item] = (
-            round(blackout_events_duration[item] / timestep) * timestep
+    if average_duration is not None:
+        # randomly assign a duration to each blackout event based on average_duration
+        blackout_events_duration = np.random.normal(
+            loc=average_duration,  # median value: blackout duration
+            scale=average_duration * std_duration,  # Standard deviation
+            size=blackout_events_number,
         )
 
-    accumulated_blackout_duration = float(sum(blackout_events_duration))
-    print(
-        "Accumulated blackout duration (rounded to timestep): "
-        + str(round(accumulated_blackout_duration, 3))
-    )
+        print(
+            "Accumulated blackout duration: "
+            + str(round(float(sum(blackout_events_duration)), 3))
+        )
+
+        # Round so that blackout durations fit simulation timestep => here, it would make sense to simulate for small timesteps
+        for item in range(0, len(blackout_events_duration)):
+            blackout_events_duration[item] = (
+                round(blackout_events_duration[item] / timestep) * timestep
+            )
+
+        accumulated_blackout_duration = float(sum(blackout_events_duration))
+        print(
+            "Accumulated blackout duration (rounded to timestep): "
+            + str(round(accumulated_blackout_duration, 3))
+        )
+    else:
+        blackout_events_duration = np.ones(blackout_events_number) * 1
 
     grid_availability = pd.Series(1, index=date_time_index)
     overlapping_blackouts = 0
     blackout_count = 0
     for j, bo_start in enumerate(blackout_events_time.index[::-1]):
         # print(j, bo_start)
+
         bo_stop = bo_start + pd.Timedelta(
-            blackout_events_duration[j] - timestep, unit="H"
+            blackout_events_duration[j] - timestep, unit="h"
         )
-        bo_stop_next = bo_start + pd.Timedelta(blackout_events_duration[j], unit="H")
+        bo_stop_next = bo_start + pd.Timedelta(blackout_events_duration[j], unit="h")
         # print(grid_availability.loc[bo_start:bo_stop])
 
         # TODO blackout happens at end of time for longer than end of time
@@ -165,12 +169,16 @@ def generate_blackout_events(
 
 
 def compute_blackout_kpis(
-    grid_availability, blackout_events_duration, overlapping_blackouts, blackout_count
+    grid_availability,
+    blackout_events_duration,
+    overlapping_blackouts,
+    blackout_count,
+    plot=True,
 ):
     """
 
     :param grid_availability:
-    :return: total number of blackout events, total hours of blackout, 
+    :return: total number of blackout events, total hours of blackout,
     """
     total_hours = len(grid_availability)
 
@@ -189,5 +197,6 @@ def compute_blackout_kpis(
     print(
         f"Grid is not operational for {round(total_grid_blackout_duration, 2)} hours out of {total_hours}, with a reliability of {round(grid_reliability * 100, 2)} percent. \n"
     )
-    grid_availability.plot()
+    if plot is True:
+        grid_availability.plot()
     return grid_reliability, total_grid_blackout_duration
